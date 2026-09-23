@@ -1,0 +1,381 @@
+.flowchart {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 40px;
+  background: transparent;
+  width: fit-content;
+  min-width: 1040px;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  position: relative;
+
+  --ink: #12213d;
+  --ink-soft: #4a5568;
+  --line: #2d5f8a;
+  --heading-accent: #6a1b9a;
+}
+
+.flowchart.theme-dark {
+  --ink: #f2f4f8;
+  --ink-soft: #cbd3e0;
+  --line: #7fb3e6;
+  --heading-accent: #d9a6ff;
+}
+
+.flow-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.io-box {
+  width: 130px;
+  flex-shrink: 0;
+  background: #0b2447;
+  color: #fff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 10px;
+}
+
+.io-label {
+  font-weight: 700;
+  font-size: 14px;
+  outline: none;
+  white-space: pre-wrap;
+}
+
+.step-card {
+  flex: 1;
+  min-width: 150px;
+  border-radius: 8px;
+  border: 2px solid #8f97a3;
+  background: #eef0f2;
+  padding: 14px 14px 16px;
+  position: relative;
+  text-align: left;
+}
+
+.step-card-pickable {
+  cursor: pointer;
+  outline: 2px dashed var(--line);
+  outline-offset: 2px;
+}
+
+.connector-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.connector-label-wrap {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  z-index: 2;
+}
+
+.connector-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  outline: none;
+}
+
+.link-handle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.link-handle-active {
+  background: var(--line);
+  color: #fff;
+  border-color: var(--line);
+}
+
+.step-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: #8f97a3;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.step-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #12213d;
+  outline: none;
+}
+
+.step-detail {
+  font-size: 12.5px;
+  color: #3a4150;
+  outline: none;
+}
+
+.step-detail::before {
+  content: '[';
+}
+.step-detail::after {
+  content: ']';
+}
+
+.arrow {
+  align-self: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 12px;
+  position: relative;
+}
+
+.arrow-right::after,
+.arrow-left::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--line);
+  transform: translateY(-50%);
+}
+
+.arrow-right::before {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-left-color: var(--line);
+  border-right: 0;
+}
+
+.arrow-left::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-right-color: var(--line);
+  border-left: 0;
+}
+
+.flow-down {
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 90px;
+}
+
+.arrow-down {
+  width: 3px;
+  height: 32px;
+  background: var(--line);
+  position: relative;
+}
+.arrow-down::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--line);
+  border-bottom: 0;
+}
+
+.flow-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin-top: -14px;
+}
+
+.evidence-box {
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  padding: 14px 18px;
+  min-width: 300px;
+}
+
+.evidence-heading {
+  font-weight: 700;
+  color: var(--heading-accent);
+  font-size: 14px;
+  outline: none;
+  margin-bottom: 6px;
+}
+
+.evidence-list {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.evidence-list li {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.evidence-item {
+  display: inline-block;
+  outline: none;
+}
+
+.loop-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: -18px;
+}
+
+.io-spacer {
+  width: 130px;
+  flex-shrink: 0;
+}
+
+.step-spacer {
+  flex: 1;
+  min-width: 150px;
+}
+
+.loop-arrow-slot {
+  width: 22px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.loop-label-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.loop-toggle {
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.loop-toggle-remove {
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  border-radius: 50%;
+}
+
+.loop-toggle-add {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding: 3px 10px;
+  border-style: dashed;
+}
+
+.arrow-up {
+  width: 3px;
+  height: 34px;
+  background: var(--line);
+  position: relative;
+}
+.arrow-up::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: var(--line);
+  border-top: 0;
+}
+
+.iteration-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-align: center;
+  outline: none;
+  max-width: 320px;
+}
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.editable {
+  cursor: text;
+  min-height: 1em;
+  border-radius: 3px;
+}
+
+.editable:hover {
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.editable:focus {
+  background: rgba(128, 128, 128, 0.22);
+}
+
+.editable:empty::before {
+  content: attr(data-placeholder);
+  color: #9aa1ab;
+}
