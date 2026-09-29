@@ -7,8 +7,84 @@ const DEFAULT_SWATCHES = [
   { label: 'Next step', color: '#8f97a3' },
 ]
 
-const LINK_SOURCE_IDS = new Set([6, 7])
+const LINK_SOURCE_IDS = new Set([5, 6, 7])
 const LINK_TARGET_IDS = new Set([1, 2, 3, 4])
+
+const LINK_COLORS = {
+  5: { light: '#2d5f8a', dark: '#7fb3e6' },
+  6: { light: '#8a4fd1', dark: '#c9a6f0' },
+  7: { light: '#c9812f', dark: '#f2c08a' },
+}
+
+// Step 5's connector always arcs highest ("stays on top"); 6 and 7 share the
+// same, lower arc height so their thin dashed lines may cross, which is far
+// less distracting than two overlapping text labels.
+const LINK_ARC_HEIGHTS = { 5: -60, 6: -30, 7: -30 }
+const LABEL_WIDTH_PER_CHAR = 6.3
+const LABEL_MIN_WIDTH = 70
+const LABEL_HEIGHT = 22
+
+function estimateLabelWidth(text) {
+  return Math.max(LABEL_MIN_WIDTH, (text || '').length * LABEL_WIDTH_PER_CHAR + 20)
+}
+
+// Point on a cubic bezier at parameter t, given its four control points.
+function bezierPoint(p0, p1, p2, p3, t) {
+  const mt = 1 - t
+  const x = mt * mt * mt * p0.x + 3 * mt * mt * t * p1.x + 3 * mt * t * t * p2.x + t * t * t * p3.x
+  const y = mt * mt * mt * p0.y + 3 * mt * mt * t * p1.y + 3 * mt * t * t * p2.y + t * t * t * p3.y
+  return { x, y }
+}
+
+// Finds t in [0, 0.5] (the near-source half, where y decreases monotonically
+// from the source down toward the arc's peak) whose y lands closest to
+// targetY - used to place a relocated label ON the curve, in the row gap.
+function findPointNearY(p0, p1, p2, p3, targetY) {
+  let lo = 0
+  let hi = 0.5
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2
+    const y = bezierPoint(p0, p1, p2, p3, mid).y
+    if (y > targetY) lo = mid
+    else hi = mid
+  }
+  return bezierPoint(p0, p1, p2, p3, (lo + hi) / 2)
+}
+
+function labelsOverlap(a, b) {
+  const ax = a.labelX - a.labelWidth / 2
+  const bx = b.labelX - b.labelWidth / 2
+  const ay = a.labelY - LABEL_HEIGHT / 2
+  const by = b.labelY - LABEL_HEIGHT / 2
+  return ax < bx + b.labelWidth && bx < ax + a.labelWidth && ay < by + LABEL_HEIGHT && by < ay + LABEL_HEIGHT
+}
+
+// Step 5 always keeps its default (top) position; between two others, the
+// higher source id yields since that's a simple, deterministic tie-break.
+function pickMover(a, b) {
+  if (a.from === 5) return b
+  if (b.from === 5) return a
+  return a.from < b.from ? b : a
+}
+
+// When two labels would overlap, drop the lower-priority one to a point
+// further down its own curve (near the source, in the gap between the two
+// rows) instead of an arbitrary spot - keeping it visually attached to its arrow.
+function resolveLabelOverlaps(geometries) {
+  for (let i = 0; i < geometries.length; i++) {
+    for (let j = i + 1; j < geometries.length; j++) {
+      const a = geometries[i]
+      const b = geometries[j]
+      if (a.relocated || b.relocated || !labelsOverlap(a, b)) continue
+      const mover = pickMover(a, b)
+      const point = findPointNearY(mover.p0, mover.p1, mover.p2, mover.p3, mover.gapY)
+      mover.labelX = point.x
+      mover.labelY = point.y
+      mover.relocated = true
+    }
+  }
+  return geometries
+}
 
 function hexToRgb(hex) {
   const clean = hex.replace('#', '')
@@ -133,7 +209,8 @@ const FlowChart = forwardRef(function FlowChart({ data, setData, theme }, forwar
   const containerRef = useRef(null)
   const boxRefs = useRef({})
   const [linkingFrom, setLinkingFrom] = useState(null)
-  const [linkGeometry, setLinkGeometry] = useState(null)
+  const [linkGeometries, setLinkGeometries] = useState([])
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
 
   const setContainerRefs = (el) => {
     containerRef.current = el
@@ -161,9 +238,14 @@ const FlowChart = forwardRef(function FlowChart({ data, setData, theme }, forwar
       evidenceItems: prev.evidenceItems.map((item) => (item.id === id ? { ...item, ...patch } : item)),
     }))
 
+  const newDataLinks = data.newDataLinks || []
+
   const handleToggleLinkSource = (id) => {
-    if (data.newDataLink?.from === id) {
-      setData((prev) => ({ ...prev, newDataLink: null }))
+    if (newDataLinks.some((link) => link.from === id)) {
+      setData((prev) => ({
+        ...prev,
+        newDataLinks: (prev.newDataLinks || []).filter((link) => link.from !== id),
+      }))
       setLinkingFrom(null)
       return
     }
@@ -172,48 +254,73 @@ const FlowChart = forwardRef(function FlowChart({ data, setData, theme }, forwar
 
   const handlePickLinkTarget = (targetId) => {
     if (linkingFrom == null) return
-    setData((prev) => ({ ...prev, newDataLink: { from: linkingFrom, to: targetId, label: 'New data' } }))
+    setData((prev) => ({
+      ...prev,
+      newDataLinks: [
+        ...(prev.newDataLinks || []).filter((link) => link.from !== linkingFrom),
+        { from: linkingFrom, to: targetId, label: 'New data' },
+      ],
+    }))
     setLinkingFrom(null)
   }
 
-  const updateLinkLabel = (label) =>
-    setData((prev) => ({ ...prev, newDataLink: { ...prev.newDataLink, label } }))
+  const updateLinkLabel = (fromId, label) =>
+    setData((prev) => ({
+      ...prev,
+      newDataLinks: (prev.newDataLinks || []).map((link) => (link.from === fromId ? { ...link, label } : link)),
+    }))
 
-  // Recompute the dashed connector's SVG path whenever the link, box text,
-  // or container size changes so it always points at the box centers.
+  // Recompute each dashed connector's SVG path whenever the links, box text,
+  // or container size changes so they always point at the box centers.
   useLayoutEffect(() => {
-    const link = data.newDataLink
-    if (!link || !containerRef.current) {
-      setLinkGeometry(null)
-      return undefined
-    }
-    const fromEl = boxRefs.current[link.from]
-    const toEl = boxRefs.current[link.to]
-    if (!fromEl || !toEl) {
-      setLinkGeometry(null)
+    if (!newDataLinks.length || !containerRef.current) {
+      setLinkGeometries([])
       return undefined
     }
 
     const update = () => {
       const containerRect = containerRef.current.getBoundingClientRect()
-      const fromRect = fromEl.getBoundingClientRect()
-      const toRect = toEl.getBoundingClientRect()
-      const ax = fromRect.left + fromRect.width / 2 - containerRect.left
-      const ay = fromRect.top - containerRect.top
-      const dx = toRect.left + toRect.width / 2 - containerRect.left
-      const dy = toRect.top - containerRect.top
-      const topY = -22
-      // Midpoint (t=0.5) of the cubic bezier, used to anchor the label near the arc's peak.
-      const labelX = (ax + dx) / 2
-      const labelY = 0.125 * (ay + dy) + 0.75 * topY
-      setLinkGeometry({
-        path: `M ${ax} ${ay} C ${ax} ${topY}, ${dx} ${topY}, ${dx} ${dy}`,
-        arrowHead: `${dx - 5},${dy - 9} ${dx + 5},${dy - 9} ${dx},${dy}`,
-        width: containerRect.width,
-        height: containerRect.height,
-        labelX,
-        labelY,
-      })
+      const geometries = newDataLinks
+        .map((link) => {
+          const fromEl = boxRefs.current[link.from]
+          const toEl = boxRefs.current[link.to]
+          if (!fromEl || !toEl) return null
+          const fromRect = fromEl.getBoundingClientRect()
+          const toRect = toEl.getBoundingClientRect()
+          const ax = fromRect.left + fromRect.width / 2 - containerRect.left
+          const ay = fromRect.top - containerRect.top
+          const dx = toRect.left + toRect.width / 2 - containerRect.left
+          const dy = toRect.top - containerRect.top
+          const topY = LINK_ARC_HEIGHTS[link.from] ?? -22
+          // Control points of the cubic bezier below, kept around so a
+          // relocated label can be re-placed at a different point ON the curve.
+          const p0 = { x: ax, y: ay }
+          const p1 = { x: ax, y: topY }
+          const p2 = { x: dx, y: topY }
+          const p3 = { x: dx, y: dy }
+          // Midpoint (t=0.5), used to anchor the label near the arc's peak by default.
+          const { x: labelX, y: labelY } = bezierPoint(p0, p1, p2, p3, 0.5)
+          // Vertical center of the empty gap between the two rows, used to
+          // find a relocation point that's both on-curve and visually in the gap.
+          const gapY = (ay + toRect.bottom - containerRect.top) / 2
+          return {
+            from: link.from,
+            label: link.label,
+            path: `M ${ax} ${ay} C ${ax} ${topY}, ${dx} ${topY}, ${dx} ${dy}`,
+            arrowHead: `${dx - 5},${dy - 9} ${dx + 5},${dy - 9} ${dx},${dy}`,
+            labelX,
+            labelY,
+            labelWidth: estimateLabelWidth(link.label),
+            gapY,
+            p0,
+            p1,
+            p2,
+            p3,
+          }
+        })
+        .filter(Boolean)
+      setLinkGeometries(resolveLabelOverlaps(geometries))
+      setContainerSize({ width: containerRect.width, height: containerRect.height })
     }
 
     update()
@@ -224,48 +331,55 @@ const FlowChart = forwardRef(function FlowChart({ data, setData, theme }, forwar
       resizeObserver.disconnect()
       window.removeEventListener('resize', update)
     }
-  }, [data.newDataLink, data.steps])
+  }, [data.newDataLinks, data.steps])
 
   const [s1, s2, s3, s4, s5, s6, s7] = data.steps
 
-  // Resolved (not CSS-variable) colors for the SVG connector, since some
+  // Resolved (not CSS-variable) colors for the SVG connectors, since some
   // PNG export libraries don't inline var()-based fill/stroke correctly.
-  const lineColor = theme === 'dark' ? '#7fb3e6' : '#2d5f8a'
   const labelBg = theme === 'dark' ? 'rgba(43, 45, 49, 0.85)' : 'rgba(255, 255, 255, 0.85)'
 
   return (
     <div className={`flowchart theme-${theme}`} ref={setContainerRefs}>
-      {linkGeometry && (
-        <>
+      {linkGeometries.map((geometry) => {
+        const lineColor = LINK_COLORS[geometry.from]?.[theme] || (theme === 'dark' ? '#7fb3e6' : '#2d5f8a')
+        return (
           <svg
+            key={geometry.from}
             className="connector-svg"
-            width={linkGeometry.width}
-            height={linkGeometry.height}
+            width={containerSize.width}
+            height={containerSize.height}
             aria-hidden="true"
           >
             <path
-              d={linkGeometry.path}
+              d={geometry.path}
               fill="none"
               stroke={lineColor}
               strokeWidth={2.5}
               strokeDasharray="7 6"
               style={{ fill: 'none', stroke: lineColor, strokeWidth: 2.5, strokeDasharray: '7 6' }}
             />
-            <polygon points={linkGeometry.arrowHead} fill={lineColor} style={{ fill: lineColor }} />
+            <polygon points={geometry.arrowHead} fill={lineColor} style={{ fill: lineColor }} />
           </svg>
+        )
+      })}
+      {linkGeometries.map((geometry) => {
+        const lineColor = LINK_COLORS[geometry.from]?.[theme] || (theme === 'dark' ? '#7fb3e6' : '#2d5f8a')
+        return (
           <div
+            key={geometry.from}
             className="connector-label-wrap"
-            style={{ left: linkGeometry.labelX, top: linkGeometry.labelY }}
+            style={{ left: geometry.labelX, top: geometry.labelY }}
           >
             <Editable
               className="connector-label"
-              value={data.newDataLink.label}
-              onChange={updateLinkLabel}
+              value={geometry.label}
+              onChange={(label) => updateLinkLabel(geometry.from, label)}
               style={{ color: lineColor, background: labelBg }}
             />
           </div>
-        </>
-      )}
+        )
+      })}
       <div className="flow-row">
         <div className="io-box">
           <Editable className="io-label" value={data.inputLabel} onChange={updateField('inputLabel')} />
@@ -318,7 +432,7 @@ const FlowChart = forwardRef(function FlowChart({ data, setData, theme }, forwar
           onChange={(v) => updateStep(s7.id, v)}
           registerRef={registerBoxRef(s7.id)}
           linkingFrom={linkingFrom}
-          hasOutgoingLink={data.newDataLink?.from === s7.id}
+          hasOutgoingLink={newDataLinks.some((link) => link.from === s7.id)}
           onToggleLinkSource={handleToggleLinkSource}
           onPickLinkTarget={handlePickLinkTarget}
         />
@@ -328,7 +442,7 @@ const FlowChart = forwardRef(function FlowChart({ data, setData, theme }, forwar
           onChange={(v) => updateStep(s6.id, v)}
           registerRef={registerBoxRef(s6.id)}
           linkingFrom={linkingFrom}
-          hasOutgoingLink={data.newDataLink?.from === s6.id}
+          hasOutgoingLink={newDataLinks.some((link) => link.from === s6.id)}
           onToggleLinkSource={handleToggleLinkSource}
           onPickLinkTarget={handlePickLinkTarget}
         />
@@ -338,6 +452,8 @@ const FlowChart = forwardRef(function FlowChart({ data, setData, theme }, forwar
           onChange={(v) => updateStep(s5.id, v)}
           registerRef={registerBoxRef(s5.id)}
           linkingFrom={linkingFrom}
+          hasOutgoingLink={newDataLinks.some((link) => link.from === s5.id)}
+          onToggleLinkSource={handleToggleLinkSource}
           onPickLinkTarget={handlePickLinkTarget}
         />
       </div>
@@ -351,30 +467,50 @@ const FlowChart = forwardRef(function FlowChart({ data, setData, theme }, forwar
           <div className="step-spacer" />
           <div className="loop-arrow-slot">
             <div className="arrow arrow-up" />
+            <div className="arrow loop-arrow-down" />
           </div>
           <div className="step-spacer" />
         </div>
       )}
 
       <div className="flow-footer">
-        <div className="evidence-box">
-          <Editable
-            className="evidence-heading"
-            value={data.evidenceHeading}
-            onChange={updateField('evidenceHeading')}
-          />
-          <ul className="evidence-list">
-            {data.evidenceItems.map((item) => (
-              <li key={item.id}>
-                <Editable
-                  className="evidence-item"
-                  value={item.text}
-                  onChange={(text) => updateEvidenceItem(item.id, { text })}
-                />
-              </li>
-            ))}
-          </ul>
-        </div>
+        {data.evidenceVisible !== false ? (
+          <div className="evidence-box">
+            <button
+              type="button"
+              className="loop-toggle loop-toggle-remove export-hide evidence-remove"
+              onClick={() => updateField('evidenceVisible')(false)}
+              title="Remove the suggested evidence box"
+            >
+              ×
+            </button>
+            <Editable
+              className="evidence-heading"
+              value={data.evidenceHeading}
+              onChange={updateField('evidenceHeading')}
+            />
+            <ul className="evidence-list">
+              {data.evidenceItems.map((item) => (
+                <li key={item.id}>
+                  <Editable
+                    className="evidence-item"
+                    value={item.text}
+                    onChange={(text) => updateEvidenceItem(item.id, { text })}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="loop-toggle loop-toggle-add export-hide"
+            onClick={() => updateField('evidenceVisible')(true)}
+            title="Add the suggested evidence box back"
+          >
+            + Evidence box
+          </button>
+        )}
 
         {data.iterationLoopVisible !== false ? (
           <div className="loop-label-inner">

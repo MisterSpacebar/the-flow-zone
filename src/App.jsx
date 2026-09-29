@@ -9,7 +9,8 @@ const initialData = {
   iterationLabel: 'Update the next cycle using validation results and instructor feedback',
   iterationLoopVisible: true,
   evidenceHeading: 'Suggested evidence under each stage:',
-  newDataLink: null,
+  evidenceVisible: true,
+  newDataLinks: [],
   evidenceItems: [
     { id: 1, text: 'Artifact produced' },
     { id: 2, text: 'Decision made' },
@@ -66,8 +67,7 @@ function App() {
       <header className="toolbar">
         <h1>The Flow Zone</h1>
         <p className="subtitle">
-          Click any text to edit it, click a numbered circle to cycle its color. Click the ⤴ on Validation or
-          Interpretation, then a box (1-4), for a new-data arrow.
+          Click any text to edit it, click a numbered circle to cycle its color. Click the ⤴, then a box (1-4), for a new-data arrow.
         </p>
         <div className="actions">
           <button type="button" onClick={handleReset} className="btn btn-secondary">
